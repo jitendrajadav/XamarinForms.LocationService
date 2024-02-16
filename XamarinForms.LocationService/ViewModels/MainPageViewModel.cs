@@ -1,9 +1,13 @@
 ﻿namespace XamarinForms.LocationService.ViewModels
 {
+    using Realms;
+    using System.Linq;
     using System.Threading.Tasks;
     using Xamarin.Essentials;
     using Xamarin.Forms;
     using XamarinForms.LocationService.Messages;
+    using XamarinForms.LocationService.Models;
+    using XamarinForms.LocationService.Services;
     using XamarinForms.LocationService.Utils;
 
     public class MainPageViewModel : BaseViewModel
@@ -52,10 +56,14 @@
         public MainPageViewModel()
         {
             StartCommand = new Command(async () => await OnStartClick());
-            EndCommand = new Command(async() => await OnStopClick());
+            EndCommand = new Command(async () => await OnStopClick());
             HandleReceivedMessages();
             StartEnabled = true;
             StopEnabled = false;
+            
+            //testing here
+            using var realm = RealmService.GetRealm();
+            var locationModels = realm.All<LocationModel>().ToList();
         }
 
         public async Task OnStartClick()
@@ -73,16 +81,16 @@
             StopEnabled = false;
         }
 
-        public async Task ValidateStatus() 
+        public async Task ValidateStatus()
         {
             var status = await SecureStorage.GetAsync(Constants.SERVICE_STATUS_KEY);
-            if (status != null && status.Equals("1")) 
+            if (status != null && status.Equals("1"))
             {
                 await Start();
             }
         }
 
-        async Task Start() 
+        async Task Start()
         {
             var message = new StartServiceMessage();
             MessagingCenter.Send(message, "ServiceStarted");
@@ -94,20 +102,39 @@
 
         void HandleReceivedMessages()
         {
-            MessagingCenter.Subscribe<LocationMessage>(this, "Location", message => {
-                Device.BeginInvokeOnMainThread(() => {
+            MessagingCenter.Subscribe<LocationMessage>(this, "Location", message =>
+            {
+                Device.BeginInvokeOnMainThread(() =>
+                {
                     Latitude = message.Latitude;
                     Longitude = message.Longitude;
                     UserMessage = "Location Updated";
                 });
+
+                try
+                {
+                    using var realm = RealmService.GetRealm();
+                    realm.WriteAsync(() =>
+                    {
+                        realm.Add(new LocationModel { Latitude = Latitude, Longitude = Longitude }, false);
+                    });
+                }
+                catch (System.Exception ex)
+                {
+
+                }
             });
-            MessagingCenter.Subscribe<StopServiceMessage>(this, "ServiceStopped", message => {
-                Device.BeginInvokeOnMainThread(() => {
+            MessagingCenter.Subscribe<StopServiceMessage>(this, "ServiceStopped", message =>
+            {
+                Device.BeginInvokeOnMainThread(() =>
+                {
                     UserMessage = "Location Service has been stopped!";
                 });
             });
-            MessagingCenter.Subscribe<LocationErrorMessage>(this, "LocationError", message => {
-                Device.BeginInvokeOnMainThread(() => {
+            MessagingCenter.Subscribe<LocationErrorMessage>(this, "LocationError", message =>
+            {
+                Device.BeginInvokeOnMainThread(() =>
+                {
                     UserMessage = "There was an error updating location!";
                 });
             });
